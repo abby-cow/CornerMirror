@@ -1,8 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import emptyStateIllustration from "./空态插图.png";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useRouter } from "next/navigation";
+import emptyStateIllustration from "./空态插图2.png";
+import headerIllustration from "./头部插图.png";
+import { SPRING_STANDARD } from "./lib/motion-presets";
 
 type RecordItem = {
   id: string;
@@ -22,18 +25,42 @@ const IMG_JAZZ_A = "https://www.figma.com/api/mcp/asset/c03136a5-e063-49d1-924a-
 const IMG_JAZZ_B = "https://www.figma.com/api/mcp/asset/4422e965-b699-4264-96c6-36ef0f9513ce";
 const IMG_WUTANG_A = "https://www.figma.com/api/mcp/asset/7915e6f4-9842-46aa-9dcd-cb4b550666ef";
 const IMG_WUTANG_B = "https://www.figma.com/api/mcp/asset/036ced33-d308-4c93-a424-c0d05746d511";
-const IMG_HEADER_ART = "https://api.builder.io/api/v1/image/assets/TEMP/6f03aaab0a84f09298f3dc6b79f3da548aaaa8b1?width=230";
+const IMG_HEADER_ART = headerIllustration.src;
 const IMG_STATUS_BATTERY = "https://www.figma.com/api/mcp/asset/53c5dfa3-d33b-43dc-b44c-b2f9d3d49b96";
 const IMG_STATUS_WIFI = "https://www.figma.com/api/mcp/asset/649858e2-3758-46e1-b35f-14ddc7183c24";
 const IMG_STATUS_SIGNAL = "https://www.figma.com/api/mcp/asset/9544f075-169d-4180-ad39-0e3ff3dd7e6b";
-const IMG_ARROW = "https://www.figma.com/api/mcp/asset/5524e90f-d3e9-4798-bac3-72e6a9fed625";
 const IMG_CALENDAR_VECTOR = "https://www.figma.com/api/mcp/asset/c03b93a1-911a-487a-939d-ccc0d3bcaed5";
+/** Chevron next to Jazz title: pt-1 aligns with 28px title cap height. */
+const TITLE_ROW_CHEVRON_CLASS = "pt-1 text-[18px] leading-[18px] text-zinc-400 select-none";
+/** Month bar: same color/size as Jazz ›, no pt-1 so arrows sit on optical center with date text. */
+const MONTH_NAV_CHEVRON_CLASS = "text-[18px] leading-none text-zinc-400 select-none";
 const IMG_EMPTY_STATE = emptyStateIllustration.src;
 const PRIMARY_GREEN = "#B0C16D";
 const UI_FONT_STACK = "'PingFang SC','SF Pro Text','SF Pro Display','Helvetica Neue',Arial,sans-serif";
 const FONT_SF_COMPACT = "'SF Compact Display','SF Pro Display','Helvetica Neue',Arial,sans-serif";
 const FONT_SF_ROUNDED = "'SF Compact Rounded','SF Pro Rounded','SF Pro Display','Helvetica Neue',Arial,sans-serif";
 const FONT_CN = "'PingFang SC','SF Pro Text','Helvetica Neue',Arial,sans-serif";
+const CHECKIN_DRAFT_STORAGE_KEY = "home:new-element-record";
+
+const FADE_SOFT = {
+  initial: { opacity: 0, y: 6 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -4 },
+  transition: { duration: 0.24, ease: "easeOut" as const },
+};
+
+function readPendingElementRecordFromSession(): RecordItem | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.sessionStorage.getItem(CHECKIN_DRAFT_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as RecordItem;
+    if (!parsed?.id || !parsed?.date || !parsed?.title) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -152,32 +179,6 @@ function generateMonthMockRecords(year: number, monthIndex: number): RecordItem[
   return records.sort((a, b) => (a.date === b.date ? (a.id < b.id ? -1 : 1) : a.date < b.date ? 1 : -1));
 }
 
-function IconChevronLeft(props: { className?: string }) {
-  return (
-    <span className={`inline-grid shrink-0 place-items-center ${props.className ?? "h-5 w-5"} text-[#7A7A7A]`}>
-      <svg viewBox="0 0 16 16" className="block h-4 w-4" aria-hidden>
-        <path
-          d="M4.67991 8.152C4.70871 8.2736 4.76951 8.384 4.85751 8.472L10.1999 13.816C10.4607 14.0768 10.8831 14.0768 11.1423 13.816C11.4015 13.5552 11.4031 13.1328 11.1423 12.8736L6.27031 8L11.1423 3.1264C11.4031 2.8656 11.4031 2.4432 11.1423 2.184C10.8815 1.9232 10.4591 1.9232 10.1999 2.184L4.85751 7.5264C4.68791 7.696 4.62871 7.9344 4.67991 8.152Z"
-          fill="currentColor"
-        />
-      </svg>
-    </span>
-  );
-}
-
-function IconChevronRight(props: { className?: string }) {
-  return (
-    <span className={`inline-grid shrink-0 place-items-center ${props.className ?? "h-5 w-5"} text-[#7A7A7A]`}>
-      <svg viewBox="0 0 16 16" className="block h-4 w-4" aria-hidden>
-        <path
-          d="M11.3201 8.152C11.2913 8.2736 11.2305 8.384 11.1425 8.472L5.80011 13.816C5.53931 14.0768 5.11691 14.0768 4.85771 13.816C4.59851 13.5552 4.59691 13.1328 4.85771 12.8736L9.72971 8L4.85771 3.1264C4.59691 2.8656 4.59691 2.4432 4.85771 2.184C5.11851 1.9232 5.54091 1.9232 5.80011 2.184L11.1425 7.5264C11.3121 7.696 11.3713 7.9344 11.3201 8.152Z"
-          fill="currentColor"
-        />
-      </svg>
-    </span>
-  );
-}
-
 function IconCalendar(props: { className?: string }) {
   return (
     <span className={`relative inline-block shrink-0 overflow-hidden ${props.className ?? "h-6 w-6"}`}>
@@ -224,16 +225,17 @@ function StatusBarMock() {
   );
 }
 
-function OverviewHeader() {
+function OverviewHeader(props: { onOpenSummary: () => void }) {
   return (
-    <div className="flex h-14 items-center justify-between">
-      <img src={IMG_HEADER_ART} alt="头部插图" className="block w-[115px] shrink-0 object-contain" />
+    <div className="relative h-14">
+      <img src={IMG_HEADER_ART} alt="头部插图" className="absolute left-0 top-1/2 block w-[115px] -translate-y-1/2 object-contain" />
       <button
         type="button"
-        className="inline-flex h-8 items-center justify-center rounded-full px-[19px] pb-[6px] pt-1 text-[13px] font-medium leading-none text-black"
+        onClick={props.onOpenSummary}
+        className="absolute right-0 top-1/2 inline-flex -translate-y-1/2 items-center justify-end p-0 text-[13px] font-medium leading-none text-black"
         style={{ fontFamily: FONT_SF_ROUNDED }}
       >
-        总览118days &gt;
+        本月打卡18次 &gt;
       </button>
     </div>
   );
@@ -277,7 +279,7 @@ function BadgeIcon({ badge }: { badge: NonNullable<RecordItem["badge"]> }) {
   );
 }
 
-function RecordCard({ item }: { item: RecordItem }) {
+function RecordCard({ item, disableMediaIntro }: { item: RecordItem; disableMediaIntro?: boolean }) {
   const bgColor = item.badge === "课堂记录" ? "#F7F8F4" : "#F8F8F8";
   const hasMedia = Boolean(item.photos && item.photos.length > 0);
   const metaParts = [item.durationLabel, item.subtitle, item.teacher].filter(
@@ -302,12 +304,14 @@ function RecordCard({ item }: { item: RecordItem }) {
         <div className={hasMedia ? "min-w-0 pr-1" : "min-w-0"}>
           <div className="flex items-center gap-1">
             <h3
-              className="max-w-full truncate text-[28px] font-medium leading-[32px] tracking-[-0.1px]"
+              className="max-w-full truncate text-[24px] font-medium leading-[32px] tracking-[-0.1px]"
               style={{ fontFamily: FONT_SF_ROUNDED }}
             >
               {item.title}
             </h3>
-            <span className="pt-1 text-[18px] leading-[18px] text-zinc-400">›</span>
+            <span className={TITLE_ROW_CHEVRON_CLASS} aria-hidden>
+              ›
+            </span>
           </div>
           {metaParts.length > 0 ? (
             <div
@@ -327,7 +331,7 @@ function RecordCard({ item }: { item: RecordItem }) {
         </div>
 
         {hasMedia ? (
-          <MediaPreviewStack photos={item.photos ?? []} />
+          <MediaPreviewStack photos={item.photos ?? []} motionKey={item.id} disableIntro={disableMediaIntro} />
         ) : null}
       </div>
 
@@ -344,7 +348,7 @@ function RecordCard({ item }: { item: RecordItem }) {
   );
 }
 
-function MediaPreviewStack({ photos }: { photos: string[] }) {
+function MediaPreviewStack({ photos, motionKey, disableIntro }: { photos: string[]; motionKey: string; disableIntro?: boolean }) {
   const list = photos.slice(0, 3);
   const count = list.length;
 
@@ -353,37 +357,82 @@ function MediaPreviewStack({ photos }: { photos: string[] }) {
   const common =
     "absolute h-[120px] w-[90px] rounded-[8px] border-2 border-white object-cover shadow-sm";
 
-  if (count === 1) {
-    return (
-      <div className="relative h-[132px] w-[138px]">
-        <img src={list[0]} alt="" className={`${common} right-[8px] top-[6px] rotate-[8deg]`} />
-      </div>
-    );
+  const positions =
+    count === 1
+      ? [{ right: 8, top: 6, z: 1, deg: 6 }]
+      : count === 2
+      ? [
+          { right: 46, top: 8, z: 1, deg: 0 },
+          { right: 4, top: 4, z: 2, deg: 6 },
+        ]
+      : [
+          { right: 50, top: 10, z: 1, deg: 0 },
+          { right: 26, top: 8, z: 2, deg: 0 },
+          { right: 2, top: 4, z: 3, deg: 6 },
+        ];
+
+  function introForIndex(i: number, deg: number) {
+    if (count === 1) {
+      // 单图也有轻微位移入场，保持和多图一致的丝滑感
+      return { x: 8, y: -2, rotate: deg + 0.8, scale: 1.008 };
+    }
+    if (i === 0) {
+      return { x: 2, y: -1, rotate: deg + 0.3, scale: 1.003 };
+    }
+    return {
+      x: 12 + (count - 1 - i) * 4,
+      y: -2 - (count - 1 - i) * 0.35,
+      rotate: deg + 1,
+      scale: 1.008,
+    };
   }
 
-  if (count === 2) {
-    return (
-      <div className="relative h-[132px] w-[138px]">
-        <img src={list[0]} alt="" className={`${common} right-[46px] top-[8px] z-[1]`} />
-        <img
-          src={list[1]}
-          alt=""
-          className={`${common} right-[4px] top-[4px] z-[2] rotate-[8deg]`}
-        />
-      </div>
-    );
-  }
-
-  // 3+ items: only the top-most card rotates.
   return (
     <div className="relative h-[132px] w-[138px]">
-      <img src={list[0]} alt="" className={`${common} right-[50px] top-[10px] z-[1]`} />
-      <img src={list[1]} alt="" className={`${common} right-[26px] top-[8px] z-[2]`} />
-      <img
-        src={list[2]}
-        alt=""
-        className={`${common} right-[2px] top-[4px] z-[3] rotate-[8deg]`}
-      />
+      {list.map((src, i) => {
+        const p = positions[i];
+        const intro = introForIndex(i, p.deg);
+        if (disableIntro) {
+          return (
+            <img
+              key={`${motionKey}-${src}-${i}`}
+              src={src}
+              alt=""
+              className={`${common} will-change-transform`}
+              style={{
+                right: `${p.right}px`,
+                top: `${p.top}px`,
+                zIndex: p.z,
+                transform: `rotate(${p.deg}deg)`,
+              }}
+            />
+          );
+        }
+
+        return (
+          <motion.img
+            key={`${motionKey}-${src}-${i}`}
+            src={src}
+            alt=""
+            className={`${common} will-change-transform`}
+            initial={intro}
+            animate={{ x: 0, y: 0, rotate: p.deg, scale: 1 }}
+            transition={{
+              type: "spring",
+              stiffness: 90,
+              damping: 30,
+              mass: 1,
+              // 晚于卡片出现（但与卡片动画有交叉）
+              delay: 0.14 + i * 0.06,
+            }}
+            style={{
+              right: `${p.right}px`,
+              top: `${p.top}px`,
+              zIndex: p.z,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -406,21 +455,31 @@ function FloatingAddButton(props: { onClick: () => void }) {
 }
 
 export default function HomeCalendarPage() {
+  const router = useRouter();
+  const pendingDraft = readPendingElementRecordFromSession();
+  const [pageExit, setPageExit] = useState(false);
   const [view, setView] = useState<"calendar" | "list">("calendar");
   const [addFlow, setAddFlow] = useState<null | "picker">(null);
   const now = new Date();
+  const initDate = pendingDraft?.date ?? ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+  const initDateObj = new Date(initDate);
+  const initYear = Number.isNaN(initDateObj.getTime()) ? now.getFullYear() : initDateObj.getFullYear();
+  const initMonthIndex = Number.isNaN(initDateObj.getTime()) ? now.getMonth() : initDateObj.getMonth();
   const [monthCursor, setMonthCursor] = useState({
-    year: now.getFullYear(),
-    monthIndex: now.getMonth(),
+    year: initYear,
+    monthIndex: initMonthIndex,
   });
-  const [selectedDate, setSelectedDate] = useState(
-    ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate())),
-  );
+  const [selectedDate, setSelectedDate] = useState(initDate);
+  const [manualRecords] = useState<RecordItem[]>(pendingDraft ? [pendingDraft] : []);
+  const [pendingScrollRecordId, setPendingScrollRecordId] = useState<string | null>(pendingDraft?.id ?? null);
+  const recordRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const records = useMemo(
-    () => generateMonthMockRecords(monthCursor.year, monthCursor.monthIndex),
-    [monthCursor.year, monthCursor.monthIndex],
-  );
+  const records = useMemo(() => {
+    const generated = generateMonthMockRecords(monthCursor.year, monthCursor.monthIndex);
+    return [...manualRecords, ...generated].sort((a, b) =>
+      a.date === b.date ? (a.id < b.id ? -1 : 1) : a.date < b.date ? 1 : -1,
+    );
+  }, [manualRecords, monthCursor.year, monthCursor.monthIndex]);
 
   const dateWithRecords = useMemo(() => new Set(records.map((r) => r.date)), [records]);
   const calendarPreviewByDate = useMemo(() => {
@@ -462,7 +521,11 @@ export default function HomeCalendarPage() {
   }, [records]);
 
   function openAddPicker() {
-    setAddFlow("picker");
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("page-nav-direction", "forward");
+    }
+    setPageExit(true);
+    window.setTimeout(() => router.push("/add"), 220);
   }
 
   function changeMonth(delta: number) {
@@ -475,39 +538,76 @@ export default function HomeCalendarPage() {
     });
   }
 
+  function openDanceSummary() {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("page-nav-direction", "forward");
+    }
+    setPageExit(true);
+    window.setTimeout(() => router.push("/dance-summary"), 220);
+  }
+
+  const navDirection = typeof window !== "undefined" ? window.sessionStorage.getItem("page-nav-direction") : null;
+  const suppressCrossPageEntryMotion = navDirection === "back";
+  const initialX = navDirection === "back" ? -22 : 22;
+  if (typeof window !== "undefined" && !pageExit) {
+    window.sessionStorage.removeItem("page-nav-direction");
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.removeItem(CHECKIN_DRAFT_STORAGE_KEY);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingScrollRecordId) return;
+    const el = recordRefs.current[pendingScrollRecordId];
+    if (!el) return;
+    window.setTimeout(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      setPendingScrollRecordId(null);
+    }, 120);
+  }, [pendingScrollRecordId, selectedDate, records.length]);
+
   return (
-    <main
+    <motion.main
       className="min-h-screen bg-white text-zinc-900"
       style={{ fontFamily: UI_FONT_STACK }}
+      initial={{ x: initialX, opacity: 0.01 }}
+      animate={pageExit ? { x: -22, opacity: 0 } : { x: 0, opacity: 1 }}
+      transition={{ duration: 0.22, ease: "easeOut" }}
     >
       <StatusBarMock />
       <div className="mx-auto w-full max-w-[375px] pb-24">
         <div className="px-5 pb-5 pt-[calc(44px+max(env(safe-area-inset-top),8px))]">
           <div className="sticky z-40 mb-3 bg-white pb-3 pt-1 top-[calc(44px+max(env(safe-area-inset-top),8px))]">
-            <OverviewHeader />
+            <OverviewHeader onOpenSummary={openDanceSummary} />
           </div>
 
           <header className="flex h-[40px] items-center justify-between">
-            <div className="grid h-[36px] grid-cols-[20px_auto_20px] items-center gap-2 rounded-[100px] bg-[#F0F0F0] px-3">
+            <div className="flex h-[36px] items-center justify-center gap-2 rounded-[100px] bg-[#F0F0F0] px-3">
               <button
                 type="button"
-                className="grid h-5 w-5 place-items-center self-center text-zinc-500"
+                className="flex h-full w-5 shrink-0 items-center justify-center text-zinc-500"
                 onClick={() => changeMonth(-1)}
               >
-                <IconChevronLeft className="h-5 w-5" />
+                <span className={MONTH_NAV_CHEVRON_CLASS} aria-hidden>
+                  ‹
+                </span>
               </button>
               <div
-                className="text-[18px] font-medium leading-5"
+                className="flex items-center text-[18px] font-medium leading-none"
                 style={{ fontFamily: FONT_SF_COMPACT }}
               >
                 {monthLabel(monthCursor.year, monthCursor.monthIndex)}
               </div>
               <button
                 type="button"
-                className="grid h-5 w-5 place-items-center self-center text-zinc-500"
+                className="flex h-full w-5 shrink-0 items-center justify-center text-zinc-500"
                 onClick={() => changeMonth(1)}
               >
-                <IconChevronRight className="h-5 w-5" />
+                <span className={MONTH_NAV_CHEVRON_CLASS} aria-hidden>
+                  ›
+                </span>
               </button>
             </div>
 
@@ -529,8 +629,15 @@ export default function HomeCalendarPage() {
             </div>
           </header>
 
+          <AnimatePresence mode="wait" initial={false}>
           {view === "calendar" ? (
-            <>
+            <motion.div
+              key={`calendar-${monthCursor.year}-${monthCursor.monthIndex}`}
+              initial={FADE_SOFT.initial}
+              animate={FADE_SOFT.animate}
+              exit={FADE_SOFT.exit}
+              transition={FADE_SOFT.transition}
+            >
               <section className="mt-[12px]">
                 <div className="grid grid-cols-7 gap-[7px]">
                   {WEEKDAYS.map((d) => (
@@ -570,8 +677,16 @@ export default function HomeCalendarPage() {
                 </div>
               </section>
 
+              <AnimatePresence mode="wait" initial={false}>
               {isEmptyState ? (
-                <section className="mt-[24px] flex flex-col items-center gap-4 px-0 text-center">
+                <motion.section
+                  key={`empty-${selectedDate}`}
+                  className="mt-[24px] flex flex-col items-center gap-4 px-0 text-center"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                >
                   <div className="flex w-full flex-col items-center gap-3">
                     <img
                       src={IMG_EMPTY_STATE}
@@ -588,22 +703,58 @@ export default function HomeCalendarPage() {
                   <button
                     type="button"
                     onClick={openAddPicker}
-                    className="inline-flex h-12 w-[120px] items-center justify-center rounded-[100px] bg-black text-[14px] font-medium leading-none text-white active:scale-[0.98]"
+                    className="inline-flex h-[36px] w-[120px] items-center justify-center rounded-[100px] bg-black text-[14px] font-medium leading-none text-white active:scale-[0.98]"
                     style={{ fontFamily: FONT_CN }}
                   >
                     去跳舞
                   </button>
-                </section>
+                </motion.section>
               ) : (
-                <section className="mt-[18px] grid gap-4">
-                  {selectedRecords.map((item) => (
-                    <RecordCard key={item.id} item={item} />
-                  ))}
-                </section>
+                <motion.section
+                  key={`records-${selectedDate}`}
+                  className="mt-[18px] grid gap-4"
+                  initial={FADE_SOFT.initial}
+                  animate={FADE_SOFT.animate}
+                  exit={FADE_SOFT.exit}
+                  transition={FADE_SOFT.transition}
+                >
+                  {selectedRecords.map((item, idx) =>
+                    suppressCrossPageEntryMotion ? (
+                      <div
+                        key={item.id}
+                        ref={(el) => {
+                          recordRefs.current[item.id] = el;
+                        }}
+                      >
+                        <RecordCard item={item} disableMediaIntro={suppressCrossPageEntryMotion} />
+                      </div>
+                    ) : (
+                      <motion.div
+                        key={item.id}
+                        ref={(el) => {
+                          recordRefs.current[item.id] = el;
+                        }}
+                        initial={{ y: 8, opacity: 0.01 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ ...SPRING_STANDARD, delay: idx * 0.05 }}
+                      >
+                        <RecordCard item={item} disableMediaIntro={suppressCrossPageEntryMotion} />
+                      </motion.div>
+                    ),
+                  )}
+                </motion.section>
               )}
-            </>
+              </AnimatePresence>
+            </motion.div>
           ) : (
-            <section className="mt-6 flex flex-col gap-6">
+            <motion.section
+              key={`list-${monthCursor.year}-${monthCursor.monthIndex}`}
+              className="mt-6 flex flex-col gap-6"
+              initial={FADE_SOFT.initial}
+              animate={FADE_SOFT.animate}
+              exit={FADE_SOFT.exit}
+              transition={FADE_SOFT.transition}
+            >
               {listGroups.map((group) => (
                 <div key={group.date} className="flex flex-col gap-4">
                   <div className="flex h-5 items-center">
@@ -615,40 +766,64 @@ export default function HomeCalendarPage() {
                     </span>
                   </div>
                   <div className="grid gap-4">
-                    {group.items.map((item) => (
-                      <RecordCard key={item.id} item={item} />
-                    ))}
+                    {group.items.map((item, idx) =>
+                      suppressCrossPageEntryMotion ? (
+                        <div key={item.id}>
+                          <RecordCard item={item} disableMediaIntro={suppressCrossPageEntryMotion} />
+                        </div>
+                      ) : (
+                        <motion.div
+                          key={item.id}
+                          initial={{ y: 8, opacity: 0.01 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          transition={{ ...SPRING_STANDARD, delay: idx * 0.04 }}
+                        >
+                          <RecordCard item={item} disableMediaIntro={suppressCrossPageEntryMotion} />
+                        </motion.div>
+                      ),
+                    )}
                   </div>
                 </div>
               ))}
-            </section>
+            </motion.section>
           )}
+          </AnimatePresence>
 
         </div>
       </div>
       <FloatingAddButton onClick={openAddPicker} />
-      {addFlow === "picker" ? (
-        <div
-          className="fixed inset-0 z-30 bg-black/25"
-          onClick={() => setAddFlow(null)}
-        >
-          <div
-            className="absolute bottom-0 left-1/2 w-full max-w-[375px] -translate-x-1/2 rounded-t-[20px] bg-white px-5 pb-[28px] pt-[16px]"
-            onClick={(e) => e.stopPropagation()}
+      <AnimatePresence>
+        {addFlow === "picker" ? (
+          <motion.div
+            className="fixed inset-0 z-30 bg-black/25"
+            onClick={() => setAddFlow(null)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
           >
-            <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-zinc-200" />
-            <div className="grid gap-2">
-              <button type="button" className="h-12 rounded-[12px] bg-[#f4f5f1] text-[16px] text-zinc-900" style={{ fontFamily: FONT_CN }}>
-                课堂记录
-              </button>
-              <button type="button" className="h-12 rounded-[12px] bg-[#f6f6f6] text-[16px] text-zinc-900" style={{ fontFamily: FONT_CN }}>
-                元素记录
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </main>
+            <motion.div
+              className="absolute bottom-0 left-1/2 w-full max-w-[375px] -translate-x-1/2 rounded-t-[20px] bg-white px-5 pb-[28px] pt-[16px]"
+              onClick={(e) => e.stopPropagation()}
+              initial={{ y: 24, opacity: 0.01 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 16, opacity: 0 }}
+              transition={SPRING_STANDARD}
+            >
+              <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-zinc-200" />
+              <div className="grid gap-2">
+                <button type="button" className="h-12 rounded-[12px] bg-[#f4f5f1] text-[16px] text-zinc-900" style={{ fontFamily: FONT_CN }}>
+                  课堂记录
+                </button>
+                <button type="button" className="h-12 rounded-[12px] bg-[#f6f6f6] text-[16px] text-zinc-900" style={{ fontFamily: FONT_CN }}>
+                  元素记录
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </motion.main>
   );
 }
 
