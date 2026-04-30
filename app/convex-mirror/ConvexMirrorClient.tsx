@@ -1227,7 +1227,8 @@ export function ConvexMirrorClient() {
                     max={360}
                     value={brushHue}
                     onChange={(e) => setBrushHue(Number(e.target.value))}
-                    className="ui-slider w-full"
+                    className="ui-slider ui-slider--hue w-full"
+                    style={{ "--thumb-color": `hsl(${brushHue} 95% 52%)` } as React.CSSProperties}
                   />
                 </div>
               </motion.div>
@@ -1275,7 +1276,7 @@ export function ConvexMirrorClient() {
           margin-top: -4px;
           border: 0;
           border-radius: 9999px;
-          background: #570000;
+          background: var(--thumb-color, #570000);
           box-shadow: none;
         }
         .ui-slider::-moz-range-track {
@@ -1289,7 +1290,7 @@ export function ConvexMirrorClient() {
           height: 12px;
           border: 0;
           border-radius: 9999px;
-          background: #570000;
+          background: var(--thumb-color, #570000);
           box-shadow: none;
         }
       `}</style>
