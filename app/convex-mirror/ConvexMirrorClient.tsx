@@ -12,13 +12,14 @@ const STREET_FALLBACK_SRC =
   "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?auto=format&fit=crop&w=1920&q=80";
 
 /**
- * 本地背景：把 GIF/图片放到 `public/` 下，默认使用 `public/bg1.gif`。
- * 页面引用为根路径 `/bg1.gif`（不是磁盘绝对路径）。
+ * 本地背景：把 GIF/图片放到 `public/` 下，默认使用 `public/bg4.gif`。
+ * 页面引用为根路径 `/bg4.gif`（不是磁盘绝对路径）。
  *
  * 环境变量可覆盖（远程或本地路径均可）：
  *   NEXT_PUBLIC_CONVEX_MIRROR_BG="/other.gif"
  */
-const LOCAL_MIRROR_BG = "/bg1.gif";
+const LOCAL_BG_POOL = ["/bg1.gif", "/bg2.gif", "/bg3.gif", "/bg4.gif", "/bg5.gif", "/bg6.gif"] as const;
+const LOCAL_MIRROR_BG = "/bg4.gif";
 
 /** 凸面镜外圈描边主色 */
 const LENS_RIM = "#570000";
@@ -178,6 +179,8 @@ export function ConvexMirrorClient() {
   const streamRef = useRef<MediaStream | null>(null);
   const landmarkerRef = useRef<HandLandmarkerLike | null>(null);
   const trackingRafRef = useRef(0);
+  const bgShuffleDeckRef = useRef<string[]>([]);
+  const bgShuffleIndexRef = useRef(0);
   const zNearRef = useRef(-0.2);
   const zFarRef = useRef(0.05);
   const smoothURef = useRef(0.5);
@@ -216,6 +219,38 @@ export function ConvexMirrorClient() {
   useEffect(() => {
     scratchPhaseRef.current = scratchPhase;
   }, [scratchPhase]);
+
+  const buildBgShuffleDeck = useCallback((current: string) => {
+    const deck = [...LOCAL_BG_POOL];
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [deck[i], deck[j]] = [deck[j]!, deck[i]!];
+    }
+    // 避免点击后“看起来没变化”（第一张与当前相同）
+    if (deck.length > 1 && deck[0] === current) {
+      [deck[0], deck[1]] = [deck[1]!, deck[0]!];
+    }
+    return deck;
+  }, []);
+
+  const rotateBackground = useCallback(() => {
+    if (
+      bgShuffleDeckRef.current.length !== LOCAL_BG_POOL.length ||
+      bgShuffleIndexRef.current >= bgShuffleDeckRef.current.length
+    ) {
+      bgShuffleDeckRef.current = buildBgShuffleDeck(mirrorBgSrc);
+      bgShuffleIndexRef.current = 0;
+    }
+    let next = bgShuffleDeckRef.current[bgShuffleIndexRef.current++] ?? LOCAL_MIRROR_BG;
+    if (next === mirrorBgSrc) {
+      if (bgShuffleIndexRef.current >= bgShuffleDeckRef.current.length) {
+        bgShuffleDeckRef.current = buildBgShuffleDeck(mirrorBgSrc);
+        bgShuffleIndexRef.current = 0;
+      }
+      next = bgShuffleDeckRef.current[bgShuffleIndexRef.current++] ?? LOCAL_MIRROR_BG;
+    }
+    setMirrorBgSrc(next);
+  }, [buildBgShuffleDeck, mirrorBgSrc]);
 
   const resizeGl = useCallback(() => {
     const wrap = wrapRef.current;
@@ -800,8 +835,8 @@ export function ConvexMirrorClient() {
   const mirrorSizeClass = "aspect-square w-[min(72vmin,440px,78vw)]";
   /** 预览区域宽度：约为镜面直径 2 倍，用于“更宽的背景渲染舞台” */
   const previewStageClass = "w-[min(98vw,900px)]";
-  /** 底部操作区背景约为镜面直径的 2 倍；镜面尺寸仍独立，不会随之变大 */
-  const controlsMaxClass = "w-[min(98vw,880px)]";
+  /** 底部操作区背景约为镜面直径的 2 倍；并为卡片保留左右各 48px 安全边距 */
+  const controlsMaxClass = "w-[min(880px,calc(100vw-96px))]";
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-neutral-950">
@@ -821,6 +856,16 @@ export function ConvexMirrorClient() {
           aria-hidden
         />
       </div>
+
+      <button
+        type="button"
+        onClick={rotateBackground}
+        className="fixed left-[max(14px,env(safe-area-inset-left,0px))] top-[max(14px,env(safe-area-inset-top,0px))] z-30 grid h-9 w-9 place-items-center rounded-full bg-black/38 text-sm text-white/92 ring-1 ring-white/24 backdrop-blur-sm transition hover:bg-black/52"
+        title="随机替换背景"
+        aria-label="随机替换背景"
+      >
+        🔀
+      </button>
 
       {/* 金属立柱：GIF(z-0) 之上、镜面(z-2) 之下；fixed 居中，底部伸出视口外不露出柱底 */}
       <div
@@ -856,16 +901,7 @@ export function ConvexMirrorClient() {
 
       <div className="relative z-10 flex min-h-full flex-col items-center justify-center gap-6 pb-[36px] pt-14 pl-[max(1.5rem,env(safe-area-inset-left,0px))] pr-[max(1.5rem,env(safe-area-inset-right,0px))] sm:pl-[max(2rem,env(safe-area-inset-left,0px))] sm:pr-[max(2rem,env(safe-area-inset-right,0px))] md:pl-[max(2.75rem,env(safe-area-inset-left,0px))] md:pr-[max(2.75rem,env(safe-area-inset-right,0px))]">
         <div className={`flex ${previewStageClass} flex-col items-center`}>
-        <header className="pointer-events-none text-center">
-          <h1 className="text-balance font-sans text-lg font-medium tracking-wide text-white/90 drop-shadow-md md:text-xl">
-            凸面镜
-          </h1>
-          <p className="mt-1 max-w-md text-pretty text-sm text-white/65 drop-shadow">
-            鱼眼实时映射 · 边缘贴纸 · 镜面涂鸦
-          </p>
-        </header>
-
-        <div className={`relative z-[2] ${mirrorSizeClass}`}>
+        <div className={`relative z-[2] -translate-y-[40px] ${mirrorSizeClass}`}>
           <div
             className="absolute inset-0 rounded-full p-[10px] shadow-[0_28px_80px_rgba(0,0,0,0.55)] md:p-[12px]"
             style={{
@@ -916,11 +952,6 @@ export function ConvexMirrorClient() {
                 onPointerUp={onPointerUpScratchMask}
                 onPointerLeave={onPointerUpScratchMask}
               />
-              {scratchPhase === "loading" && (
-                <div className="pointer-events-none absolute inset-0 z-[22] flex items-center justify-center rounded-full bg-black/40 px-4 text-center text-sm font-medium text-white/90">
-                  正在开启摄像头…
-                </div>
-              )}
               {!isLiveLens && tool === "none" && scratchPhase === "off" && (
                 <div
                   className="absolute inset-0 z-[9] cursor-cell rounded-full touch-none"
@@ -1047,46 +1078,13 @@ export function ConvexMirrorClient() {
           </div>
         </div>
 
-        <div
-          className={`relative z-20 mt-2 translate-y-9 flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/35 p-3 shadow-xl backdrop-blur-md ${controlsMaxClass}`}
+        <motion.div
+          layout
+          transition={springProminent}
+          className={`fixed bottom-[max(36px,env(safe-area-inset-bottom,0px))] left-1/2 z-20 -translate-x-1/2 flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/35 p-3 shadow-xl backdrop-blur-md ${controlsMaxClass}`}
         >
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-white/10 pb-2">
-            <div className="flex flex-wrap items-center gap-2">
-              {(
-                [
-                  { id: "none" as const, label: "◉", tip: "浏览" },
-                  { id: "draw" as const, label: "✎", tip: "涂鸦" },
-                  { id: "sticker" as const, label: "★", tip: "贴纸" },
-                ] satisfies { id: Tool; label: string; tip: string }[]
-              ).map((t) => (
-                <motion.button
-                  key={t.id}
-                  type="button"
-                  whileTap={{ scale: 0.92 }}
-                  transition={springTap}
-                  onClick={() => setTool(tool === t.id ? "none" : t.id)}
-                  title={t.tip}
-                  aria-label={t.tip}
-                  className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition-colors ${
-                    tool === t.id
-                      ? "bg-[#570000]/92 text-white ring-[#7a0d0d]/60"
-                      : "bg-white/10 text-white/85 ring-white/12 hover:bg-white/16"
-                  }`}
-                >
-                  {t.label}
-                </motion.button>
-              ))}
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.92 }}
-                transition={springTap}
-                onClick={clearMirrorDecor}
-                className="rounded-full bg-white/8 px-3 py-1.5 text-sm text-white/80 ring-1 ring-white/10 hover:bg-white/14"
-              >
-                ⌫
-              </motion.button>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
             <motion.button
               type="button"
               whileTap={{ scale: 0.94 }}
@@ -1111,14 +1109,52 @@ export function ConvexMirrorClient() {
               transition={springTap}
               onClick={resetLens}
               className="rounded-full bg-white/8 px-3.5 py-1.5 text-sm font-medium text-white/85 ring-1 ring-white/12 hover:bg-white/14"
+              title="重置"
+              aria-label="重置"
             >
-              ↺ 重置
+              ↺
             </motion.button>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {(
+                [
+                  { id: "draw" as const, label: "✎", tip: "编辑" },
+                  { id: "sticker" as const, label: "★", tip: "贴纸" },
+                ] satisfies { id: Exclude<Tool, "none">; label: string; tip: string }[]
+              ).map((t) => (
+                <motion.button
+                  key={t.id}
+                  type="button"
+                  whileTap={{ scale: 0.92 }}
+                  transition={springTap}
+                  onClick={() => setTool(tool === t.id ? "none" : t.id)}
+                  title={t.tip}
+                  aria-label={t.tip}
+                  className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition-colors ${
+                    tool === t.id
+                      ? "bg-[#570000]/92 text-white ring-[#7a0d0d]/60"
+                      : "bg-white/10 text-white/85 ring-white/12 hover:bg-white/16"
+                  }`}
+                >
+                  {t.label}
+                </motion.button>
+              ))}
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.92 }}
+                transition={springTap}
+                onClick={clearMirrorDecor}
+                className="rounded-full bg-white/8 px-3 py-1.5 text-sm text-white/80 ring-1 ring-white/10 hover:bg-white/14"
+                title="清除"
+                aria-label="清除"
+              >
+                ⌫
+              </motion.button>
             </div>
           </div>
           <div className="flex flex-col gap-1.5 pt-1 text-sm text-white/75">
-            <div className="flex items-center gap-2">
-              <span className="shrink-0">鱼眼强度</span>
+            <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-3">
+              <span className="text-left">鱼眼强度</span>
               <input
                 type="range"
                 min={0.35}
@@ -1126,14 +1162,11 @@ export function ConvexMirrorClient() {
                 step={0.01}
                 value={distortion}
                 onChange={(e) => setDistortion(Number(e.target.value))}
-                className="ui-slider w-full max-w-[220px]"
+                className="ui-slider w-full"
               />
-              <span className="w-11 text-right tabular-nums text-white/65">
-                {distortion.toFixed(2)}
-              </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="shrink-0" title="偏小更易拍全身，偏大更近特写">
+            <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-3">
+              <span className="text-left" title="偏小更易拍全身，偏大更近特写">
                 视野 / 焦距
               </span>
               <input
@@ -1143,57 +1176,73 @@ export function ConvexMirrorClient() {
                 step={0.01}
                 value={fieldZoom}
                 onChange={(e) => setFieldZoom(Number(e.target.value))}
-                className="ui-slider w-full max-w-[220px]"
+                className="ui-slider w-full"
               />
-              <span className="w-11 text-right tabular-nums text-white/65">
-                {fieldZoom.toFixed(2)}
-              </span>
             </div>
-            <p className="text-xs text-white/45">
-              左：更广（全身） · 右：更近（特写）
-            </p>
           </div>
 
-          {tool === "sticker" && (
-            <div className="flex flex-col gap-1.5 border-t border-white/10 pt-2">
-              <p className="text-xs text-white/45">
-                点在圆内放置 · 拖动移动 · 滚轮缩放 · 双击删除 · 按住时描边、松手即消
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {STICKER_OPTIONS.map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => setStickerPick(g)}
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg text-lg ${
-                      stickerPick === g ? "bg-white/20 ring-1 ring-[#570000]/75" : "bg-white/8 hover:bg-white/14"
-                    }`}
-                  >
-                    {g}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <AnimatePresence mode="wait" initial={false}>
+            {tool === "sticker" && (
+              <motion.div
+                key="sticker-panel"
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 6 }}
+                transition={springProminent}
+                className="flex flex-col gap-1.5 border-t border-white/10 pt-2"
+              >
+                <div className="flex flex-wrap gap-1">
+                  {STICKER_OPTIONS.map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setStickerPick(g)}
+                      className={`flex h-9 w-9 items-center justify-center rounded-lg text-lg ${
+                        stickerPick === g ? "bg-white/20 ring-1 ring-[#570000]/75" : "bg-white/8 hover:bg-white/14"
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
 
-          {tool === "draw" && (
-            <div className="flex items-center gap-2 border-t border-white/10 pt-2 text-sm text-white/75">
-              <span className="shrink-0">笔触色相</span>
-              <input
-                type="range"
-                min={0}
-                max={360}
-                value={brushHue}
-                onChange={(e) => setBrushHue(Number(e.target.value))}
-                className="ui-slider w-full max-w-[200px]"
-              />
-            </div>
-          )}
+            {tool === "draw" && (
+              <motion.div
+                key="draw-panel"
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 6 }}
+                transition={springProminent}
+                className="border-t border-white/10 pt-2 text-sm text-white/75"
+              >
+                <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-3">
+                  <span className="text-left">笔触色相</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={360}
+                    value={brushHue}
+                    onChange={(e) => setBrushHue(Number(e.target.value))}
+                    className="ui-slider w-full"
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {uploadError && (
             <p className="w-full text-center text-sm text-amber-200/95">{uploadError}</p>
           )}
-        </div>
+          {tool === "sticker" && (
+            <p className="pt-1 text-[11px] text-white/28">
+              点在圆内放置 · 拖动移动 · 滚轮缩放 · 双击删除 · 按住时描边、松手即消
+            </p>
+          )}
+        </motion.div>
         </div>
       </div>
       <style jsx>{`
