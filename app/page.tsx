@@ -1,6 +1,6 @@
-import HomeCalendarPage from "./home-calendar";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <HomeCalendarPage />;
+  redirect("/convex-mirror");
 }
 
